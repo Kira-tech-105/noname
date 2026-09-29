@@ -1,0 +1,138 @@
+name: Deploy to GitHub & Cloudflare Pages
+
+on:
+  # Runs on pushes targeting the default branch
+  push:
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - .dockerignore
+      - .eslintrc.json
+      - .gitignore
+      - .mise.toml
+      - .nomedia
+      - .prettierrc
+      - Dockerfile
+      - deno.json
+      - docker-compose.yml
+      - eslint.config.js
+      - eslint.config.mjs
+      - prettier.config.js
+      - prettier.config.mjs
+    branches:
+      - "master"
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  deployments: write #Allow deployment to Cloudflare Pages
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy-github:
+    name: Deploy to GitHub Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 25
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v6
+
+      - name: Run Build
+        run: pnpm build
+        env:
+          IS_GITHUB_PAGES: 'true'
+          VITE_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: './dist'
+          retention-days: 1
+          include-hidden-files: true
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
+
+  deploy-cloudflare:
+    name: Deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+          run_install: false
+
+      - name: Install Wrangler latest
+        run: pnpm add -D -w wrangler@latest
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 25
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Build
+        run: pnpm build
+        env:
+          IS_CLOUDFLARE_PAGES: 'true'
+
+      - name: Create Cloudflare Pages 404
+        run: |
+          if [ ! -f ./dist/404.html ]; then
+            echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>404 Not Found</title></head><body><h1>404 Not Found</h1><p>The requested page could not be found.</p><a href="/">Go Home</a></body></html>' > ./dist/404.html
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          packageManager: pnpm
+          command: pages deploy ./dist --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+      - name: Clean up old Cloudflare Pages Deployments
+        uses: mfinelli/cloudflare-pages-cleanup@v1
+        with:
+          cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          project: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
+          min-to-keep: 1
+          max-to-keep: 1
+          emit_report_artifact: false
+          emit_step_summary: false

@@ -1,0 +1,30 @@
+dist
+dist-types
+output
+node_modules
+package-lock.json
+.turbo
+README.md
+*.zip
+*.txt
+*.pdf
+*.bak
+
+# IDE
+.idea/
+.vscode/
+
+# macOS
+._*
+.Spotlight-V100
+.Trashes
+.DS_Store
+.DS_Store?
+
+# Windows
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Skill for private use
+.agents/skills/*-selfuse
